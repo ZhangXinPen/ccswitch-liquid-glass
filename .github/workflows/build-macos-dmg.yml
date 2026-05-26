@@ -101,11 +101,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build DMG
-        run: pnpm tauri build --target aarch64-apple-darwin --bundles dmg --ci --config src-tauri/tauri.ci.conf.json
+      - name: Build macOS app
+        run: pnpm tauri build --target aarch64-apple-darwin --bundles app --ci --config src-tauri/tauri.ci.conf.json
 
-      - name: Prepare macOS assets
+      - name: Sign and package macOS DMG
         shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           mkdir -p release-assets
@@ -117,12 +124,84 @@ jobs:
             tag="preview-${{ github.run_number }}"
           fi
 
-          dmg="$(find src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name '*.dmg' -type f | head -1)"
-          if [ -z "$dmg" ]; then
-            echo "No macOS DMG package was produced." >&2
+          app_path="$(find src-tauri/target/aarch64-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' -type d | head -1)"
+          if [ -z "$app_path" ]; then
+            echo "No macOS .app bundle was produced." >&2
             exit 1
           fi
-          cp "$dmg" "release-assets/CC-Switch-$tag-macOS-arm64.dmg"
+
+          sign_identity="-"
+          notarize=false
+
+          if [ -n "${APPLE_CERTIFICATE:-}" ] && [ -n "${APPLE_CERTIFICATE_PASSWORD:-}" ] && [ -n "${KEYCHAIN_PASSWORD:-}" ]; then
+            cert_path="$RUNNER_TEMP/certificate.p12"
+            printf '%s' "$APPLE_CERTIFICATE" | (base64 --decode 2>/dev/null || base64 -D) > "$cert_path"
+
+            keychain_path="$RUNNER_TEMP/build.keychain-db"
+            security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+            security set-keychain-settings -lut 21600 "$keychain_path"
+            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+            security import "$cert_path" \
+              -k "$keychain_path" \
+              -P "$APPLE_CERTIFICATE_PASSWORD" \
+              -T /usr/bin/codesign \
+              -T /usr/bin/security
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$keychain_path"
+
+            sign_identity="$(security find-identity -v -p codesigning "$keychain_path" \
+              | grep "Developer ID Application" | grep -oE '"[^"]+"' | head -1 | tr -d '"')"
+            if [ -z "$sign_identity" ]; then
+              echo "No Developer ID Application identity found in APPLE_CERTIFICATE." >&2
+              security find-identity -v -p codesigning "$keychain_path" || true
+              exit 1
+            fi
+            echo "Using Developer ID identity: $sign_identity"
+            if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
+              notarize=true
+            fi
+          else
+            echo "Apple Developer ID secrets are not configured; using ad-hoc signing."
+          fi
+
+          if [ "$sign_identity" = "-" ]; then
+            codesign --force --deep --sign - "$app_path"
+          else
+            codesign --force --deep --options runtime --timestamp --sign "$sign_identity" "$app_path"
+          fi
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+
+          dmg_stage="$RUNNER_TEMP/dmg-stage"
+          rm -rf "$dmg_stage"
+          mkdir -p "$dmg_stage"
+          ditto "$app_path" "$dmg_stage/CC Switch.app"
+          ln -s /Applications "$dmg_stage/Applications"
+
+          dmg_path="release-assets/CC-Switch-$tag-macOS-arm64.dmg"
+          hdiutil create \
+            -volname "CC Switch" \
+            -srcfolder "$dmg_stage" \
+            -ov \
+            -format UDZO \
+            "$dmg_path"
+
+          if [ "$sign_identity" = "-" ]; then
+            codesign --force --sign - "$dmg_path" || true
+          else
+            codesign --force --timestamp --sign "$sign_identity" "$dmg_path"
+          fi
+          hdiutil verify "$dmg_path"
+
+          if [ "$notarize" = true ]; then
+            xcrun notarytool submit "$dmg_path" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+            xcrun stapler staple "$dmg_path"
+            xcrun stapler validate "$dmg_path"
+          else
+            echo "Skipping notarization because Apple notarization secrets are not fully configured."
+          fi
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -168,7 +247,7 @@ jobs:
           tag_name: ${{ steps.release.outputs.tag }}
           target_commitish: ${{ github.sha }}
           name: CC Switch Liquid Glass ${{ steps.release.outputs.tag }}
-          prerelease: true
+          prerelease: false
           body: |
             ## CC Switch Liquid Glass ${{ steps.release.outputs.tag }}
 
@@ -187,11 +266,15 @@ jobs:
             - Windows portable build: `CC-Switch-${{ steps.release.outputs.tag }}-Windows-Portable.zip`
             - macOS Apple Silicon DMG: `CC-Switch-${{ steps.release.outputs.tag }}-macOS-arm64.dmg`
 
+            > macOS note: fully trusted first-open installation requires Apple Developer ID signing and notarization secrets in this repository. Without those secrets, the DMG is ad-hoc signed and macOS Gatekeeper may require manual approval.
+
             ### 中文说明
 
             这是基于开源项目 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 修改的 UI 风格分支。本版本保留上游功能，并加入 Liquid Glass 视觉风格、托盘快速切换弹窗、overlay 标题栏和远端自动打包流程。
 
             本 Release 附带 Windows 安装版、Windows 绿色版和 macOS Apple Silicon DMG。
+
+            > macOS 说明：如需下载后双击免拦截安装，需要在仓库 Secrets 中配置 Apple Developer ID 签名和公证信息。未配置时，DMG 会使用 ad-hoc 签名，macOS Gatekeeper 可能仍需要手动放行。
           files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
