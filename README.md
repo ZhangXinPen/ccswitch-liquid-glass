@@ -234,7 +234,7 @@ CC Switch provides a "Shared Config Snippet" feature to pass common data (beyond
 <details>
 <summary><strong>macOS installation</strong></summary>
 
-CC Switch for macOS is code-signed and notarized by Apple. You can download and install it directly — no extra steps needed. We recommend using the `.dmg` installer.
+This fork's macOS DMG is ad-hoc signed and is not notarized with an Apple Developer ID. If macOS blocks the app after installation, drag `CC Switch.app` from the DMG to `/Applications`, then run the commands in the macOS installation section below.
 
 </details>
 
@@ -317,7 +317,17 @@ brew upgrade --cask cc-switch
 
 Download `CC-Switch-v{version}-macOS.dmg` (recommended) or `.zip` from the [Releases](../../releases) page.
 
-> **Note**: CC Switch for macOS is code-signed and notarized by Apple. You can install and open it directly.
+> **Note**: This fork's macOS build is ad-hoc signed and is not notarized with an Apple Developer ID. After dragging `CC Switch.app` into `/Applications`, macOS Gatekeeper may still require manual approval.
+
+If macOS reports that the app is damaged or cannot verify the developer, run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/CC Switch.app"
+xattr -dr com.apple.provenance "/Applications/CC Switch.app" 2>/dev/null || true
+open "/Applications/CC Switch.app"
+```
+
+These commands assume you have already dragged `CC Switch.app` from the DMG into `/Applications`. If you run them while the app is still inside the mounted DMG, the `/Applications/CC Switch.app` path will not exist.
 
 ### Arch Linux Users
 

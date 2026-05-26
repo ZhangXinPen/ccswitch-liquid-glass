@@ -234,7 +234,7 @@ CC Switch 使用“通用配置片段”功能，在不同的供应商之间传�
 <details>
 <summary><strong>macOS 安装</strong></summary>
 
-CC Switch macOS 版本已通过 Apple 代码签名和公证，可直接下载安装，无需额外操作。推荐使用 `.dmg` 安装包。
+本分支的 macOS DMG 使用 ad-hoc 签名，并未使用 Apple Developer ID 公证。如果安装后被 macOS 拦截，请先把 DMG 里的 `CC Switch.app` 拖到 `/Applications`，再按下方 macOS 安装说明中的命令手动放行。
 
 </details>
 
@@ -319,7 +319,17 @@ brew upgrade --cask cc-switch
 
 从 [Releases](../../releases) 页面下载 `CC-Switch-v{版本号}-macOS.dmg`（推荐）或 `.zip`。
 
-> **注意**：CC Switch macOS 版本已通过 Apple 代码签名和公证，可直接安装打开。
+> **注意**：本分支的 macOS 构建使用 ad-hoc 签名，并未使用 Apple Developer ID 公证。把 `CC Switch.app` 拖入 `/Applications` 后，macOS Gatekeeper 仍可能需要手动放行。
+
+如果 macOS 提示应用已损坏，或无法验证开发者，请执行：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/CC Switch.app"
+xattr -dr com.apple.provenance "/Applications/CC Switch.app" 2>/dev/null || true
+open "/Applications/CC Switch.app"
+```
+
+这些命令的前提是你已经把 DMG 里的 `CC Switch.app` 拖到了 `/Applications`。如果应用还在挂载的 DMG 里，`/Applications/CC Switch.app` 这个路径会不存在。
 
 ### Arch Linux 用户
 
