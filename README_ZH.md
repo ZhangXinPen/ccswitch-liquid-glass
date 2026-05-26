@@ -17,6 +17,18 @@
 
 </div>
 
+## Fork 与修改说明
+
+本仓库是基于开源项目 **CC Switch**（[farion1231/cc-switch](https://github.com/farion1231/cc-switch)）修改的 UI 风格分支。原项目仍然是供应商切换、MCP/Prompts/Skills 管理、本地代理、用量追踪、云同步以及 Tauri 桌面架构的基础。
+
+本分支保留上游功能，并加入 Liquid Glass 视觉刷新和发布打包调整：
+
+- 使用半透明玻璃质感、层叠高光、模糊效果和新的浅色/深色主题变量，重做了主应用外壳、供应商卡片、工具栏、弹窗、下拉菜单和通用控件。
+- 新增 Liquid Glass 风格的托盘弹窗，用于在 Claude、Codex、Gemini 之间快速切换供应商，并提供当前供应商状态、刷新、设置、打开主界面和退出操作。
+- 调整桌面窗口样式，使用 overlay 标题栏，并为托盘弹窗加入透明窗口行为。
+- 新增 GitHub Actions macOS ARM64 `.dmg` 构建流程，可直接通过 GitHub 托管的 macOS runner 产出 macOS 安装包。
+- 保留原有多语言文档、截图、功能描述和许可证署名，方便用户继续参考上游 CC Switch 的行为说明。
+
 ## ❤️赞助商
 
 > [想出现在这里？](mailto:farion1231@gmail.com)

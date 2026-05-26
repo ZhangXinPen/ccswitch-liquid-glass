@@ -17,6 +17,18 @@ English | [中文](README_ZH.md) | [日本語](README_JA.md) | [Changelog](CHANG
 
 </div>
 
+## Fork & Modification Notice
+
+This repository is a UI-focused fork based on the open-source **CC Switch** project: [farion1231/cc-switch](https://github.com/farion1231/cc-switch). The original project remains the foundation for provider switching, MCP/Prompts/Skills management, local proxy, usage tracking, cloud sync, and the Tauri desktop architecture.
+
+This fork keeps the upstream feature set and applies a Liquid Glass visual refresh plus release packaging adjustments:
+
+- Reworked the main app shell, provider cards, toolbars, dialogs, dropdowns, and common controls with translucent glass surfaces, layered highlights, blur, and updated light/dark theme tokens.
+- Added a dedicated Liquid Glass tray popover for quick provider switching across Claude, Codex, and Gemini, with active-provider status, refresh, settings, open, and quit actions.
+- Updated desktop window styling for an overlay title bar and transparent tray popover window behavior.
+- Added GitHub Actions support for building a macOS ARM64 `.dmg` artifact, so macOS packages can be produced directly on GitHub-hosted macOS runners.
+- Kept the original multilingual documentation, screenshots, feature descriptions, and license attribution so users can still refer to the upstream CC Switch behavior.
+
 ## ❤️Sponsor
 
 > [Want to appear here?](mailto:farion1231@gmail.com)
