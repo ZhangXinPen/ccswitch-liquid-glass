@@ -696,7 +696,7 @@ fn ensure_tray_popover(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWi
         return Ok(window);
     }
 
-    let window = WebviewWindowBuilder::new(
+    let builder = WebviewWindowBuilder::new(
         app,
         TRAY_POPOVER_LABEL,
         WebviewUrl::App("index.html#/tray".into()),
@@ -706,8 +706,12 @@ fn ensure_tray_popover(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWi
     .min_inner_size(320.0, 420.0)
     .max_inner_size(380.0, 640.0)
     .resizable(false)
-    .decorations(false)
-    .transparent(true)
+    .decorations(false);
+
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.transparent(true);
+
+    let window = builder
     .background_color(Color(0, 0, 0, 0))
     .always_on_top(true)
     .skip_taskbar(true)
