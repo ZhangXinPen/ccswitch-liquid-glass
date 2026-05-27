@@ -9,6 +9,7 @@ use crate::codex_config;
 use crate::config::{self, get_claude_settings_path, ConfigStatus};
 use crate::settings;
 use crate::store::AppState;
+use std::path::Path;
 
 #[tauri::command]
 pub async fn get_claude_config_status() -> Result<ConfigStatus, String> {
@@ -182,7 +183,16 @@ pub async fn pick_directory(
     #[allow(non_snake_case)] defaultPath: Option<String>,
 ) -> Result<Option<String>, String> {
     let initial = defaultPath
-        .map(|p| p.trim().to_string())
+        .map(|p| {
+            let path = std::path::PathBuf::from(p.trim());
+            if path.is_file() {
+                path.parent()
+                    .map(|parent| parent.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.to_string_lossy().to_string())
+            } else {
+                path.to_string_lossy().to_string()
+            }
+        })
         .filter(|p| !p.is_empty());
 
     let result = tauri::async_runtime::spawn_blocking(move || {
@@ -202,6 +212,50 @@ pub async fn pick_directory(
                 .into_path()
                 .map_err(|e| format!("解析选择的目录失败: {e}"))?;
             Ok(Some(resolved.to_string_lossy().to_string()))
+        }
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+pub async fn pick_theme_image(
+    app: AppHandle,
+    #[allow(non_snake_case)] defaultPath: Option<String>,
+) -> Result<Option<String>, String> {
+    let initial = defaultPath
+        .map(|p| {
+            let path = std::path::PathBuf::from(p.trim());
+            if path.is_file() {
+                path.parent()
+                    .map(|parent| parent.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.to_string_lossy().to_string())
+            } else {
+                path.to_string_lossy().to_string()
+            }
+        })
+        .filter(|p| !p.is_empty());
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut builder = app.dialog().file();
+        if let Some(path) = initial {
+            builder = builder.set_directory(path);
+        }
+        builder
+            .add_filter("Images", &["png", "jpg", "jpeg", "webp", "gif"])
+            .blocking_pick_file()
+    })
+    .await
+    .map_err(|e| format!("弹出图片选择器失败: {e}"))?;
+
+    match result {
+        Some(file_path) => {
+            let resolved = file_path
+                .simplified()
+                .into_path()
+                .map_err(|e| format!("解析选择的图片失败: {e}"))?;
+            let staged = crate::config::stage_theme_background(Path::new(&resolved))
+                .map_err(|e| e.to_string())?;
+            Ok(Some(staged.to_string_lossy().to_string()))
         }
         None => Ok(None),
     }

@@ -4,138 +4,315 @@ import React, {
   useEffect,
   useMemo,
   useState,
+  useCallback,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
-
-type Theme = "light" | "dark" | "system";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import type {
+  SkinMode,
+  ThemeAppearanceSettings,
+  ThemeBackgroundSettings,
+  ThemeMode,
+} from "@/types";
 
 interface ThemeProviderProps {
   children: React.ReactNode;
-  defaultTheme?: Theme;
+  defaultTheme?: ThemeMode;
   storageKey?: string;
+  appearance?: ThemeAppearanceSettings | null;
 }
 
 interface ThemeContextValue {
-  theme: Theme;
-  setTheme: (theme: Theme) => void;
+  theme: ThemeMode;
+  skin: SkinMode;
+  appearance: ThemeAppearanceSettings;
+  setTheme: (theme: ThemeMode) => void;
+  setSkin: (skin: SkinMode) => void;
+  setAppearance: (appearance: ThemeAppearanceSettings) => void;
+  setBackground: (background: ThemeBackgroundSettings) => void;
 }
+
+const STORAGE_KEY = "cc-switch-theme";
+const SKIN_STORAGE_KEY = "cc-switch-skin";
+
+const DEFAULT_THEME_BY_SKIN: Record<SkinMode, ThemeMode> = {
+  original: "system",
+  glass: "system",
+  custom: "system",
+};
+
+const DEFAULT_APPEARANCE: ThemeAppearanceSettings = {
+  activeSkin: "glass",
+  themeBySkin: { ...DEFAULT_THEME_BY_SKIN },
+  background: {
+    enabled: false,
+    opacity: 1,
+    blur: 0,
+    fit: "cover",
+    position: "center",
+    overlayOpacity: 0.28,
+  },
+};
 
 const ThemeProviderContext = createContext<ThemeContextValue | undefined>(
   undefined,
 );
 
+function normalizeAppearance(
+  appearance?: ThemeAppearanceSettings | null,
+): ThemeAppearanceSettings {
+  const merged: ThemeAppearanceSettings = {
+    ...DEFAULT_APPEARANCE,
+    ...(appearance ?? {}),
+    themeBySkin: {
+      ...DEFAULT_THEME_BY_SKIN,
+      ...(appearance?.themeBySkin ?? {}),
+    },
+    background: {
+      ...DEFAULT_APPEARANCE.background,
+      ...(appearance?.background ?? {}),
+    },
+  };
+
+  if (
+    merged.activeSkin !== "original" &&
+    merged.activeSkin !== "glass" &&
+    merged.activeSkin !== "custom"
+  ) {
+    merged.activeSkin = "glass";
+  }
+  return merged;
+}
+
+function readStoredTheme(storageKey: string, fallback: ThemeMode): ThemeMode {
+  if (typeof window === "undefined") return fallback;
+  const stored = window.localStorage.getItem(storageKey);
+  return stored === "light" || stored === "dark" || stored === "system"
+    ? stored
+    : fallback;
+}
+
+function readStoredSkin(): SkinMode {
+  if (typeof window === "undefined") return "glass";
+  const stored = window.localStorage.getItem(SKIN_STORAGE_KEY);
+  return stored === "original" || stored === "glass" || stored === "custom"
+    ? stored
+    : "glass";
+}
+
+function getSystemTheme(): "light" | "dark" {
+  if (typeof window === "undefined" || !window.matchMedia) return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
 export function ThemeProvider({
   children,
   defaultTheme = "system",
-  storageKey = "cc-switch-theme",
+  storageKey = STORAGE_KEY,
+  appearance,
 }: ThemeProviderProps) {
-  const getInitialTheme = () => {
-    if (typeof window === "undefined") {
-      return defaultTheme;
-    }
-
-    const stored = window.localStorage.getItem(storageKey) as Theme | null;
-    if (stored === "light" || stored === "dark" || stored === "system") {
-      return stored;
-    }
-
-    return defaultTheme;
-  };
-
-  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+  const [theme, setThemeState] = useState<ThemeMode>(() =>
+    readStoredTheme(storageKey, defaultTheme),
+  );
+  const [skin, setSkinState] = useState<SkinMode>(() => readStoredSkin());
+  const [themeAppearance, setThemeAppearance] =
+    useState<ThemeAppearanceSettings>(() => {
+      const normalized = normalizeAppearance(appearance);
+      if (appearance) return normalized;
+      const storedSkin = readStoredSkin();
+      const storedTheme = readStoredTheme(storageKey, defaultTheme);
+      return normalizeAppearance({
+        ...normalized,
+        activeSkin: storedSkin,
+        themeBySkin: {
+          ...normalized.themeBySkin,
+          [storedSkin]: storedTheme,
+        },
+      });
+    });
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
+    if (!appearance) return;
+    const next = normalizeAppearance(appearance);
+    setThemeAppearance(next);
+    setSkinState(next.activeSkin as SkinMode);
+    setThemeState(
+      next.themeBySkin?.[next.activeSkin as SkinMode] ?? defaultTheme,
+    );
+  }, [appearance, defaultTheme]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     window.localStorage.setItem(storageKey, theme);
-  }, [theme, storageKey]);
+  }, [storageKey, theme]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SKIN_STORAGE_KEY, skin);
+  }, [skin]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const root = window.document.documentElement;
+    root.dataset.skin = skin;
+    root.dataset.theme = theme;
+
+    const resolvedTheme = theme === "system" ? getSystemTheme() : theme;
+
+    root.classList.toggle("dark", resolvedTheme === "dark");
+    root.classList.toggle("light", resolvedTheme === "light");
+    root.style.setProperty("--app-theme-mode", resolvedTheme);
+    root.style.setProperty("--app-skin-mode", skin);
+  }, [skin, theme]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
     const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
-
-    if (theme === "system") {
-      const isDark =
-        window.matchMedia &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches;
-      root.classList.add(isDark ? "dark" : "light");
-      return;
-    }
-
-    root.classList.add(theme);
-  }, [theme]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => {
-      if (theme !== "system") {
-        return;
-      }
-
-      const root = window.document.documentElement;
-      root.classList.toggle("dark", mediaQuery.matches);
-      root.classList.toggle("light", !mediaQuery.matches);
+    const background: ThemeBackgroundSettings = {
+      ...DEFAULT_APPEARANCE.background,
+      ...(themeAppearance.background ?? {}),
     };
 
-    if (theme === "system") {
-      handleChange();
+    if (background.enabled && background.imagePath) {
+      root.style.setProperty(
+        "--app-bg-image",
+        `url("${convertFileSrc(background.imagePath)}")`,
+      );
+      root.style.setProperty(
+        "--app-bg-opacity",
+        String(background.opacity ?? 1),
+      );
+      root.style.setProperty("--app-bg-blur", `${background.blur ?? 0}px`);
+      root.style.setProperty("--app-bg-fit", background.fit ?? "cover");
+      root.style.setProperty(
+        "--app-bg-position",
+        background.position ?? "center",
+      );
+      root.style.setProperty(
+        "--app-bg-overlay-opacity",
+        String(background.overlayOpacity ?? 0.28),
+      );
+      root.dataset.bgEnabled = "true";
+    } else {
+      root.style.removeProperty("--app-bg-image");
+      root.style.setProperty("--app-bg-opacity", "0");
+      root.style.setProperty("--app-bg-blur", "0px");
+      root.style.setProperty("--app-bg-overlay-opacity", "0");
+      root.dataset.bgEnabled = "false";
     }
+  }, [themeAppearance]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = () => {
+      if (theme !== "system") return;
+      const resolved = mediaQuery.matches ? "dark" : "light";
+      window.document.documentElement.classList.toggle(
+        "dark",
+        resolved === "dark",
+      );
+      window.document.documentElement.classList.toggle(
+        "light",
+        resolved === "light",
+      );
+      window.document.documentElement.style.setProperty(
+        "--app-theme-mode",
+        resolved,
+      );
+    };
 
     mediaQuery.addEventListener("change", handleChange);
+    handleChange();
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, [theme]);
 
-  // Sync native window theme (Windows/macOS title bar)
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    let isCancelled = false;
-
-    const updateNativeTheme = async (nativeTheme: string) => {
-      if (isCancelled) return;
-      try {
-        await invoke("set_window_theme", { theme: nativeTheme });
-      } catch (e) {
-        // Ignore errors (e.g., when not running in Tauri)
-        console.debug("Failed to set native window theme:", e);
+    if (typeof window === "undefined") return;
+    let active = true;
+    void invoke("set_window_theme", { theme }).catch((error) => {
+      if (active) {
+        console.debug("Failed to set native window theme:", error);
       }
-    };
-
-    // When "system", pass "system" so Tauri uses None (follows OS theme natively).
-    // This keeps the WebView's prefers-color-scheme in sync with the real OS theme,
-    // allowing effect #3's media query listener to fire on system theme changes.
-    if (theme === "system") {
-      updateNativeTheme("system");
-    } else {
-      updateNativeTheme(theme);
-    }
-
+    });
     return () => {
-      isCancelled = true;
+      active = false;
     };
   }, [theme]);
+
+  const updateTheme = useCallback(
+    (nextTheme: ThemeMode) => {
+      setThemeState(nextTheme);
+      setThemeAppearance((prev) => ({
+        ...prev,
+        themeBySkin: {
+          ...(prev.themeBySkin ?? DEFAULT_THEME_BY_SKIN),
+          [skin]: nextTheme,
+        },
+      }));
+    },
+    [skin],
+  );
+
+  const updateSkin = useCallback(
+    (nextSkin: SkinMode) => {
+      setSkinState(nextSkin);
+      setThemeAppearance((prev) => ({
+        ...prev,
+        activeSkin: nextSkin,
+      }));
+      setThemeState(
+        themeAppearance.themeBySkin?.[nextSkin] ??
+          DEFAULT_THEME_BY_SKIN[nextSkin],
+      );
+    },
+    [themeAppearance.themeBySkin],
+  );
+
+  const updateAppearance = useCallback(
+    (nextAppearance: ThemeAppearanceSettings) => {
+      const normalized = normalizeAppearance(nextAppearance);
+      setThemeAppearance(normalized);
+      setSkinState(normalized.activeSkin as SkinMode);
+      setThemeState(
+        normalized.themeBySkin?.[normalized.activeSkin as SkinMode] ??
+          DEFAULT_THEME_BY_SKIN[normalized.activeSkin as SkinMode],
+      );
+    },
+    [],
+  );
+
+  const updateBackground = useCallback(
+    (background: ThemeBackgroundSettings) => {
+      setThemeAppearance((prev) =>
+        normalizeAppearance({ ...prev, background }),
+      );
+    },
+    [],
+  );
 
   const value = useMemo<ThemeContextValue>(
     () => ({
       theme,
-      setTheme: (nextTheme: Theme) => {
-        if (nextTheme === theme) return;
-        setThemeState(nextTheme);
-      },
+      skin,
+      appearance: themeAppearance,
+      setTheme: updateTheme,
+      setSkin: updateSkin,
+      setAppearance: updateAppearance,
+      setBackground: updateBackground,
     }),
-    [theme],
+    [
+      skin,
+      theme,
+      themeAppearance,
+      updateAppearance,
+      updateBackground,
+      updateSkin,
+      updateTheme,
+    ],
   );
 
   return (

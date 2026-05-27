@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsQuery } from "@/lib/query";
-import type { Settings } from "@/types";
+import type { Settings, SkinMode, ThemeMode } from "@/types";
 
 type Language = "zh" | "en" | "ja";
 
 export type SettingsFormState = Omit<Settings, "language"> & {
   language: Language;
+};
+
+const DEFAULT_THEME_BY_SKIN: Record<SkinMode, ThemeMode> = {
+  original: "system",
+  glass: "system",
+  custom: "system",
 };
 
 const normalizeLanguage = (lang?: string | null): Language => {
@@ -86,6 +92,23 @@ export function useSettingsForm(): UseSettingsFormResult {
         data.enableClaudePluginIntegration ?? false,
       silentStartup: data.silentStartup ?? false,
       skipClaudeOnboarding: data.skipClaudeOnboarding ?? false,
+      themeAppearance: {
+        activeSkin: data.themeAppearance?.activeSkin ?? "glass",
+        themeBySkin: {
+          ...DEFAULT_THEME_BY_SKIN,
+          ...(data.themeAppearance?.themeBySkin ?? {}),
+        },
+        background: {
+          enabled: data.themeAppearance?.background?.enabled ?? false,
+          imagePath: data.themeAppearance?.background?.imagePath,
+          opacity: data.themeAppearance?.background?.opacity ?? 1,
+          blur: data.themeAppearance?.background?.blur ?? 0,
+          fit: data.themeAppearance?.background?.fit ?? "cover",
+          position: data.themeAppearance?.background?.position ?? "center",
+          overlayOpacity:
+            data.themeAppearance?.background?.overlayOpacity ?? 0.28,
+        },
+      },
       claudeConfigDir: sanitizeDir(data.claudeConfigDir),
       codexConfigDir: sanitizeDir(data.codexConfigDir),
       geminiConfigDir: sanitizeDir(data.geminiConfigDir),
@@ -110,6 +133,18 @@ export function useSettingsForm(): UseSettingsFormResult {
             useAppWindowControls: false,
             enableClaudePluginIntegration: false,
             skipClaudeOnboarding: false,
+            themeAppearance: {
+              activeSkin: "glass",
+              themeBySkin: { ...DEFAULT_THEME_BY_SKIN },
+              background: {
+                enabled: false,
+                opacity: 1,
+                blur: 0,
+                fit: "cover",
+                position: "center",
+                overlayOpacity: 0.28,
+              },
+            },
             language: readPersistedLanguage(),
           } as SettingsFormState);
 
@@ -147,6 +182,24 @@ export function useSettingsForm(): UseSettingsFormResult {
           serverData.enableClaudePluginIntegration ?? false,
         silentStartup: serverData.silentStartup ?? false,
         skipClaudeOnboarding: serverData.skipClaudeOnboarding ?? false,
+        themeAppearance: {
+          activeSkin: serverData.themeAppearance?.activeSkin ?? "glass",
+          themeBySkin: {
+            ...DEFAULT_THEME_BY_SKIN,
+            ...(serverData.themeAppearance?.themeBySkin ?? {}),
+          },
+          background: {
+            enabled: serverData.themeAppearance?.background?.enabled ?? false,
+            imagePath: serverData.themeAppearance?.background?.imagePath,
+            opacity: serverData.themeAppearance?.background?.opacity ?? 1,
+            blur: serverData.themeAppearance?.background?.blur ?? 0,
+            fit: serverData.themeAppearance?.background?.fit ?? "cover",
+            position:
+              serverData.themeAppearance?.background?.position ?? "center",
+            overlayOpacity:
+              serverData.themeAppearance?.background?.overlayOpacity ?? 0.28,
+          },
+        },
         claudeConfigDir: sanitizeDir(serverData.claudeConfigDir),
         codexConfigDir: sanitizeDir(serverData.codexConfigDir),
         geminiConfigDir: sanitizeDir(serverData.geminiConfigDir),

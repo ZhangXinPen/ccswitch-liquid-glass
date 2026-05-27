@@ -51,6 +51,10 @@ export const settingsApi = {
     return await invoke("pick_directory", { defaultPath });
   },
 
+  async pickThemeImage(defaultPath?: string): Promise<string | null> {
+    return await invoke("pick_theme_image", { defaultPath });
+  },
+
   async selectConfigDirectory(defaultPath?: string): Promise<string | null> {
     return await invoke("pick_directory", { defaultPath });
   },

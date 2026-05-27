@@ -300,6 +300,9 @@ export interface Settings {
   // 首选语言（可选，默认中文）
   language?: "en" | "zh" | "ja";
 
+  // ===== 全局外观设置 =====
+  themeAppearance?: ThemeAppearanceSettings;
+
   // 主页面显示的应用（默认全部显示）
   visibleApps?: VisibleApps;
 
@@ -348,6 +351,25 @@ export interface Settings {
   // Windows: "cmd" | "powershell" | "wt"
   // Linux: "gnome-terminal" | "konsole" | "xfce4-terminal" | "alacritty" | "kitty" | "ghostty"
   preferredTerminal?: string;
+}
+
+export type ThemeMode = "light" | "dark" | "system";
+export type SkinMode = "original" | "glass" | "custom";
+
+export interface ThemeAppearanceSettings {
+  activeSkin?: SkinMode;
+  themeBySkin?: Partial<Record<SkinMode, ThemeMode>>;
+  background?: ThemeBackgroundSettings;
+}
+
+export interface ThemeBackgroundSettings {
+  enabled?: boolean;
+  imagePath?: string;
+  opacity?: number;
+  blur?: number;
+  fit?: "cover" | "contain";
+  position?: string;
+  overlayOpacity?: number;
 }
 
 export interface SessionMeta {

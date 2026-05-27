@@ -10,10 +10,26 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/theme-provider";
 import { queryClient } from "@/lib/query";
 import { Toaster } from "@/components/ui/sonner";
+import { settingsApi } from "@/lib/api";
+import { useSettingsQuery } from "@/lib/query";
+import { useTheme } from "@/components/theme-provider";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { message } from "@tauri-apps/plugin-dialog";
 import { exit } from "@tauri-apps/plugin-process";
+
+function AppearanceSync() {
+  const { data: settings } = useSettingsQuery();
+  const { setAppearance } = useTheme();
+
+  React.useEffect(() => {
+    if (settings?.themeAppearance) {
+      setAppearance(settings.themeAppearance);
+    }
+  }, [settings?.themeAppearance, setAppearance]);
+
+  return null;
+}
 
 // 根据平台添加 body class，便于平台特定样式
 try {
@@ -76,11 +92,22 @@ async function bootstrap() {
 
   if (isTrayPopover) {
     document.body.classList.add("tray-popover-window");
+    const appearance = await settingsApi
+      .get()
+      .then((settings) => settings.themeAppearance)
+      .catch(() => undefined);
     ReactDOM.createRoot(document.getElementById("root")!).render(
       <React.StrictMode>
-        <ThemeProvider defaultTheme="system" storageKey="cc-switch-theme">
-          <TrayPopoverApp />
-        </ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider
+            defaultTheme="system"
+            storageKey="cc-switch-theme"
+            appearance={appearance}
+          >
+            <AppearanceSync />
+            <TrayPopoverApp />
+          </ThemeProvider>
+        </QueryClientProvider>
       </React.StrictMode>,
     );
     return;
@@ -105,6 +132,7 @@ async function bootstrap() {
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider defaultTheme="system" storageKey="cc-switch-theme">
+          <AppearanceSync />
           <UpdateProvider>
             <App />
             <Toaster />

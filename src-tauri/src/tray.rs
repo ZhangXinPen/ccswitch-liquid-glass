@@ -4,8 +4,8 @@
 
 use once_cell::sync::Lazy;
 use tauri::menu::{CheckMenuItem, Menu, MenuBuilder, MenuItem, Submenu, SubmenuBuilder};
-use tauri::{Emitter, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindowBuilder};
 use tauri::utils::config::Color;
+use tauri::{Emitter, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::app_config::AppType;
@@ -712,13 +712,13 @@ fn ensure_tray_popover(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWi
     let builder = builder.transparent(true);
 
     let window = builder
-    .background_color(Color(0, 0, 0, 0))
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .focused(false)
-    .visible(false)
-    .shadow(true)
-    .build()?;
+        .background_color(Color(0, 0, 0, 0))
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .visible(false)
+        .shadow(true)
+        .build()?;
 
     let window_for_event = window.clone();
     window.on_window_event(move |event| {

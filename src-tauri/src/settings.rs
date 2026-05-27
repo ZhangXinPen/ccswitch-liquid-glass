@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{OnceLock, RwLock};
 
@@ -101,6 +100,30 @@ fn default_profile() -> String {
     "default".to_string()
 }
 
+fn default_skin_mode() -> String {
+    "glass".to_string()
+}
+
+fn default_theme_mode() -> String {
+    "system".to_string()
+}
+
+fn default_background_opacity() -> f32 {
+    1.0
+}
+
+fn default_background_fit() -> String {
+    "cover".to_string()
+}
+
+fn default_background_position() -> String {
+    "center".to_string()
+}
+
+fn default_background_overlay_opacity() -> f32 {
+    0.28
+}
+
 /// WebDAV 同步设置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -121,6 +144,66 @@ pub struct WebDavSyncSettings {
     pub profile: String,
     #[serde(default)]
     pub status: WebDavSyncStatus,
+}
+
+/// 背景图设置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeBackgroundSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_path: Option<String>,
+    #[serde(default = "default_background_opacity")]
+    pub opacity: f32,
+    #[serde(default)]
+    pub blur: f32,
+    #[serde(default = "default_background_fit")]
+    pub fit: String,
+    #[serde(default = "default_background_position")]
+    pub position: String,
+    #[serde(default = "default_background_overlay_opacity")]
+    pub overlay_opacity: f32,
+}
+
+impl Default for ThemeBackgroundSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            image_path: None,
+            opacity: default_background_opacity(),
+            blur: 0.0,
+            fit: default_background_fit(),
+            position: default_background_position(),
+            overlay_opacity: default_background_overlay_opacity(),
+        }
+    }
+}
+
+/// 主题外观设置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeAppearanceSettings {
+    #[serde(default = "default_skin_mode")]
+    pub active_skin: String,
+    #[serde(default)]
+    pub theme_by_skin: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub background: ThemeBackgroundSettings,
+}
+
+impl Default for ThemeAppearanceSettings {
+    fn default() -> Self {
+        let mut theme_by_skin = std::collections::BTreeMap::new();
+        theme_by_skin.insert("original".to_string(), default_theme_mode());
+        theme_by_skin.insert("glass".to_string(), default_theme_mode());
+        theme_by_skin.insert("custom".to_string(), default_theme_mode());
+        Self {
+            active_skin: default_skin_mode(),
+            theme_by_skin,
+            background: ThemeBackgroundSettings::default(),
+        }
+    }
 }
 
 impl Default for WebDavSyncSettings {
@@ -228,6 +311,8 @@ pub struct AppSettings {
     pub common_config_confirmed: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_appearance: Option<ThemeAppearanceSettings>,
 
     // ===== 主页面显示的应用 =====
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -330,6 +415,7 @@ impl Default for AppSettings {
             first_run_notice_confirmed: None,
             common_config_confirmed: None,
             language: None,
+            theme_appearance: Some(ThemeAppearanceSettings::default()),
             visible_apps: None,
             claude_config_dir: None,
             codex_config_dir: None,
@@ -415,6 +501,51 @@ impl AppSettings {
             .filter(|s| matches!(*s, "en" | "zh" | "ja"))
             .map(|s| s.to_string());
 
+        if let Some(theme) = &mut self.theme_appearance {
+            let skin = theme.active_skin.trim();
+            theme.active_skin = match skin {
+                "original" | "glass" | "custom" => skin.to_string(),
+                _ => default_skin_mode(),
+            };
+
+            if theme.theme_by_skin.is_empty() {
+                let mut theme_by_skin = std::collections::BTreeMap::new();
+                theme_by_skin.insert("original".to_string(), default_theme_mode());
+                theme_by_skin.insert("glass".to_string(), default_theme_mode());
+                theme_by_skin.insert("custom".to_string(), default_theme_mode());
+                theme.theme_by_skin = theme_by_skin;
+            } else {
+                for key in ["original", "glass", "custom"] {
+                    theme
+                        .theme_by_skin
+                        .entry(key.to_string())
+                        .or_insert_with(default_theme_mode);
+                }
+            }
+
+            let bg = &mut theme.background;
+            bg.opacity = bg.opacity.clamp(0.0, 1.0);
+            bg.blur = bg.blur.clamp(0.0, 64.0);
+            bg.overlay_opacity = bg.overlay_opacity.clamp(0.0, 1.0);
+            bg.fit = match bg.fit.trim() {
+                "contain" => "contain".to_string(),
+                _ => "cover".to_string(),
+            };
+            bg.position = if bg.position.trim().is_empty() {
+                default_background_position()
+            } else {
+                bg.position.trim().to_string()
+            };
+            bg.image_path = bg.image_path.as_ref().and_then(|p| {
+                let trimmed = p.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            });
+        }
+
         if let Some(sync) = &mut self.webdav_sync {
             sync.normalize();
             if sync.is_empty() {
@@ -464,6 +595,7 @@ fn save_settings_file(settings: &AppSettings) -> Result<(), AppError> {
     #[cfg(unix)]
     {
         use std::fs::OpenOptions;
+        use std::io::Write;
         use std::os::unix::fs::OpenOptionsExt;
 
         let mut file = OpenOptions::new()

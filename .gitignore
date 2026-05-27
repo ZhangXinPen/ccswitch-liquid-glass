@@ -12,6 +12,7 @@ CLAUDE.md
 # AGENTS.md
 GEMINI.md
 /.claude
+/.codegraph/
 /.codex
 /.gemini
 /.cc-switch

@@ -223,7 +223,10 @@ export function SettingsPage({
                       value={settings.language}
                       onChange={(lang) => handleAutoSave({ language: lang })}
                     />
-                    <ThemeSettings />
+                    <ThemeSettings
+                      value={settings.themeAppearance}
+                      onChange={handleAutoSave}
+                    />
                     <AppVisibilitySettings
                       settings={settings}
                       onChange={handleAutoSave}

@@ -244,8 +244,7 @@ function App() {
   const mcpPanelRef = useRef<any>(null);
   const skillsPageRef = useRef<any>(null);
   const unifiedSkillsPanelRef = useRef<any>(null);
-  const addActionButtonClass =
-    "glass-orange-button rounded-full w-10 h-10";
+  const addActionButtonClass = "glass-orange-button rounded-full w-10 h-10";
 
   const {
     isRunning: isProxyRunning,

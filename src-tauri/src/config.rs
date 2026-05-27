@@ -122,6 +122,14 @@ pub fn get_app_config_dir() -> PathBuf {
     default_dir
 }
 
+/// 获取主题资源目录路径 (~/.cc-switch/theme)
+///
+/// 背景图通过 Tauri asset protocol 加载，目录需要与 tauri.conf.json
+/// 中的 asset scope 保持一致；因此这里不跟随可迁移的 app config dir。
+pub fn get_theme_assets_dir() -> PathBuf {
+    get_home_dir().join(".cc-switch").join("theme")
+}
+
 /// 获取应用配置文件路径
 pub fn get_app_config_path() -> PathBuf {
     get_app_config_dir().join("config.json")
@@ -397,6 +405,27 @@ pub fn copy_file(from: &Path, to: &Path) -> Result<(), AppError> {
         source: e,
     })?;
     Ok(())
+}
+
+/// 将背景图复制到应用主题目录并返回目标路径
+pub fn stage_theme_background(from: &Path) -> Result<PathBuf, AppError> {
+    if !from.exists() {
+        return Err(AppError::Config(format!("文件不存在: {}", from.display())));
+    }
+
+    let assets_dir = get_theme_assets_dir();
+    fs::create_dir_all(&assets_dir).map_err(|e| AppError::io(&assets_dir, e))?;
+
+    let file_name = from
+        .file_name()
+        .ok_or_else(|| AppError::Config("无效的背景图片路径".to_string()))?;
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let target = assets_dir.join(format!("{ts}-{}", file_name.to_string_lossy()));
+    copy_file(from, &target)?;
+    Ok(target)
 }
 
 /// 删除文件
